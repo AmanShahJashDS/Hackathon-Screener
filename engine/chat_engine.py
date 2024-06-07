@@ -2,11 +2,12 @@ from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from langchain_anthropic import ChatAnthropic
 from dotenv import load_dotenv, find_dotenv
 import os
+import PyPDF2
 
 # load API keys
 _ = load_dotenv(find_dotenv())
 
-class ChatEngine():
+class GenEngine():
     def __init__(self):
         MODEL_NAME = "claude-3-opus-20240229"
         self.llm = ChatAnthropic(
@@ -20,37 +21,102 @@ class ChatEngine():
         self.messages = [
                             SystemMessage(
                                 content="""
-                        You are an AI interviewer whose job is to screen candidates based on their knowledge on data science. Data science is a wide field which involves various concepts like linear algebra, statistics, machine learning, deep learning, large language models and computer vision. Candidate might have mode expertise in particular area (mentioned above) based on the project the candidate has worked upon. Also, candidate can be fresher as well as experienced. One common thing to evaluate would be the basic fundamentals of data science which would include fundamentals of above mentioned concepts. Here are some common things to evaluate:
-                        1. Linear Algebra: hyperplane, cosine similarity of vectors, euclidean distance between vectors, dimensionality of vectors
-                        2. Statistics: mean, median, mode, correlation, normal distribution, Q-Q plot, central limit theorem
-                        3. ML fundamentals: supervised, unsupervised, dimensionality reduction techniques, bias variance trade off, evaluation metric in classification and regression, KNN, SVM, logistic regression, linear regression
-                        4. Deep learning fundamentals: gradient descent, variation in gradient descent, batch normalization, dropout, gradient clipping, activation functions
-                        5. Large Language Model: transformer architecture, RNN, LSTM, attention mechanism
-                        6. Computer Vision: convolution, kernels
+                        ###### JD ######
+                        Designation: # designation name
+                        Experience: # Experience in Years
 
-                        From the above 6 sections you can ask 5 questions, one from each section. You need to ask one question at a time wait for the users response. Once you receive response from the candidate you ask the next question.
+                        Primary Skills:
 
-                        Instructions to follow:
-                        1. Directly start with question and do not add any additional text acknowledging the receipt of any answer or stating like lets move to next question
-                        2. Your job is to collect the answer received from the candidate. Do not add any comment on whether the answer is correct or not. This is not in your scope to evaluate the answer. Just move on to the next question.
-                        3. Once a question is asked by you, candidate is suppose to answer the question (correct or incorrect) doesn't matter. You should not try to explain your question or provide any answer even if asked. Just move to next question.
-                        4. Do not respond to any request made by the candidate. Stick to asking question as per the above instruction.
-                        5. Once all the 5 question are done, end the conversation with friendly note. Remember not to evaluate the candidate based on the answer.
+                        1. Machine Learning Algorithms
+                        2. Statistical Methods
+                        3. Python, R
+                        4. Flask
+                        5. Neural Network
+
+                        Secondary Skills:
+                        1. Pandas.
+                        2. NoSQL.
+                        3. Data Analytics
+
+
+                        ###### Resume ######
+                        Candidate's Skill:
+                        1. Machine learning
+                        2. Deep learning
+                        3. Computer Vision
+
+                        ###### PROMPT ######
+                        You are AI interviewer who need to generate questions given job description provided by recruiter 
+                        and candidate's skill extracted from the resume.
+
+                        Instruction to generate questions:
+                        1. Questions should cover all the primary skills, some of the secondary skills and candidate's skills
+                        2. Total 10 questions should be generated
+                        3. Questions should be around fundamentals involved in the skills mentioned
+                        4. Along with questions provide the skills on you are evaluating. Note: skills should be from the given context only.
                         """
                             ),
                             HumanMessage(
-                                    content="Hi"
+                                    content="Provide Question"
                                     )
                             ]
 
-    def invoke(self, llm_response, user_input):
-        if user_input == "":
-            user_input = "I don't know"
-        self.messages.append(AIMessage(content=llm_response))
-        self.messages.append(HumanMessage(content=user_input))
-        response = self.llm.invoke(self.messages)
-        return response
+    def invoke(self):
+        return self.llm.invoke(self.messages)
     
-    def invoke_initial(self):
-        response = self.llm.invoke(self.messages)
-        return response
+class ParseEngine():
+    def __init__(self):
+        MODEL_NAME = "claude-3-opus-20240229"
+        self.llm = ChatAnthropic(
+                    model=MODEL_NAME,
+                    temperature=0,
+                    max_tokens=1024,
+                    timeout=None,
+                    max_retries=2,
+                    # other params...
+                )
+
+        self.messages = [
+                    SystemMessage(
+                                content="""
+                        You are a recruiter reviewing a candidates job profile.
+                        """
+                    ),
+                    ]
+
+    def invoke(self, pdf_path, cursor):
+        resume_text = self.parse_resume(pdf_path)
+        job_text = cursor.execute("query")
+        self.messages.append(HumanMessage(
+                                    content=f"""
+                                    This is a  resume : {resume_text} 
+                                    Extract the following information from the given resume 
+                                    in a json. [The first key should be 'Years of Experience' if it doesn't show any experience 
+                                    or if the candidate is a recent graduate give 0 give me answer as one number and nothing else, 
+                                    The second key is 'Current Position' if any else return Student here,  and the third key is a 
+                                    'Key Skills' this is a comma seprated list of five most relevant keyskills from this person's resume 
+                                    to this job description {job_text}. I only want skills that are present in the resume and 
+                                    relevant to the skills in {job_text} and it would be ideal if we have one skill from resume that is 
+                                    relevant to a different skill in {job_text}. All skills should be present in the resume]
+                                    """
+                                    ))
+        return self.llm.invoke(self.messages)
+
+    def parse_resume(self, pdf_path):
+        # Open the PDF file
+        with open(pdf_path, 'rb') as file:
+            # Create a PDF reader object
+            pdf_reader = PyPDF2.PdfReader(file)
+
+            # Get the number of pages in the PDF
+            num_pages = len(pdf_reader.pages)
+
+            # Initialize a variable to store the extracted text
+            text = ""
+
+            # Loop through each page and extract text
+            for page_num in range(num_pages):
+                page = pdf_reader.pages[page_num]
+                text += page.extract_text()
+
+        return text
