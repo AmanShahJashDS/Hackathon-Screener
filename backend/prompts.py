@@ -60,12 +60,18 @@ You are AI interviewer who need to generate questions given job description prov
 
 Instruction to generate questions:
 1. Questions should cover all the primary skills, some of the secondary skills and candidate's skills
-2. Generate 10 question
+2. Generate 10 questions
 3. Questions should be around fundamentals involved in the skills mentioned
-4. Along with questions provide the skills on which you are evaluating. Note: skills should be from the given context only.
 
 # Ouptut Format:
-{"questions": [q1, q2, ...]}
+
+### JSON
+```
+{"questions": #List(string)}
+```
+
+Instruction:
+Just give output in above JSON format without any explanation or template text.
 """
 
 PARSE_PROMPT="""
@@ -81,9 +87,9 @@ It would be ideal if we have one skill from resume that is relevant to a differe
 Output Format:
 ### JSON
 ```
-{
-"experience": # years of experience if provided, fresher if mentioned or Unknown of not mentioned 
-"key_skills": # list of skills that are matching with job description, order by most relevant skills along with skills mentioned in job description
-}
+{"experience": # years of experience if provided fresher if mentioned or Unknown of not mentioned, "key_skills": # list of skills that are matching with job description, order by most relevant skills along with skills mentioned in job description}
 ```
+
+Instruction:
+Just give output in json format without any explanation or template text.
 """

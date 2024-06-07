@@ -7,6 +7,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import os
+from engine import GenEngine, ParseEngine
+import json
+from http.client import HTTPException
 
 UPLOAD_DIRECTORY = "/home/ec2-user/resumes"  
 
@@ -216,9 +219,67 @@ async def list_jobs(
         return {"status_code": f"exception raised : {e}"}
 
 @app.post("/analysis")
-async def upload_pdf(pdf_file: UploadFile = File(...)):
-    file_path = os.path.join(UPLOAD_DIRECTORY, pdf_file.filename)
-    with open(file_path, "wb") as file_object:
-        file_object.write(await pdf_file.read())
+async def upload_pdf(pdf_file: UploadFile = File(...),
+                     job_id: str = Query(...),
+                     db: Session = Depends(get_db)):
+    try:
+        
+        # extract filename from file
+        timestamp = str(datetime.now())
+        filename = timestamp+pdf_file.filename
+
+        # check if file is pdf
+        if not filename.endswith('.pdf'):
+            return {"status_code": 400, "detail": "Invalid file type"}
+        
+        # upload file to server
+        file_path = os.path.join(UPLOAD_DIRECTORY, filename)
+        with open(file_path, "wb") as file_object:
+            file_object.write(await pdf_file.read())
+
+    except Exception as e:
+        print(f"Exception occured while uploading file : {e}")
+        return {"status_code": 400, "detail": "Error while uploading pdf file"}
+
+    try:
+
+        job_req_query=text("SELECT primary_skills,secondary_skills,required_exp FROM screener.job_requirements where job_id='{}'".format(job_id))
+        job_requirements = db.execute(job_req_query, {'job_id': job_id}).fetchone()
+        
+    except Exception as e:
+        print(f"Exception occured while reading from Job Requirements table : {e}")
+        return {"status_code": 400, "detail": "Error while reading from Job Requirements table"}
+
+    # invoke parser engine
+    try:
+        resume_parser = ParseEngine()
+        resume_response = resume_parser.invoke(file_path, job_requirements)
+        resume_data = json.loads(resume_response.content.replace("\n", "").strip())
+
+    except Exception as e:
+        print(f"exception occured while parsing resume : {e}")
+        return {"status_code": 400, "detail": "Error while Parsing Resume"}
+
+    # invoke chat engine
+    try:
+        chat_engine = GenEngine()
+        questions_response = chat_engine.invoke(resume_data["key_skills"], job_requirements)
+        print(f"questions_response : {questions_response}")
+        questions = json.loads(questions_response.content.replace("\n", "").strip())
+    except Exception as e:
+        print(f"exception occured while generating questions : {e}")
+        return {"status_code": 400, "detail": "Error while Generating questions"}
+    try:
+        response_data = {
+                    "jobs_data":questions["questions"],
+                    "Success": True,
+                    "timestamp": str(datetime.now()),
+                }
+        return response_data
+    except Exception as e:
+        print(str(e))
+        return {"status_code": 400, "detail": "Error while Generating questions"}
+
+
         
     
