@@ -116,3 +116,41 @@ class ParseEngine():
                 text += page.extract_text()
 
         return text
+
+
+class EvalEngine():
+    def __init__(self):
+        MODEL_NAME = "claude-3-opus-20240229"
+        self.llm = ChatAnthropic(
+                    model=MODEL_NAME,
+                    temperature=0,
+                    max_tokens=1024,
+                    timeout=None,
+                    max_retries=2,
+                    # other params...
+                )
+
+        self.messages = [
+                    SystemMessage(
+                                content="""
+                        Given question answer pair you need to evaluate candidate's answer on each question.
+                        Steps to evaluate:
+                        1. Extract points to be covered to answer the given question
+                        2. Evaluate if most of the points are covered for given answer
+                        3. Rate the answer based on the points covered in the range of 1-10
+                        4. Don't give higher rating if there are only key words without much explanation
+
+                        Output Format:
+                        ### JSON
+                        {"q1": #rating (int), "q2": #rating (int), # similarly for other questions}
+                        """
+                    ),
+                    ]
+
+    def invoke(self, qa_pairs):
+        self.messages.append(HumanMessage(
+                                    content=f"""
+                                    {qa_pairs}
+                                    """
+                                    ))
+        return self.llm.invoke(self.messages)
