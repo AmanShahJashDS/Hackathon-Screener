@@ -24,8 +24,7 @@ class GenEngine():
                             )
                             ]
 
-    def invoke(self, skills, cursor, job_id):
-        job_text = cursor.execute("query")
+    def invoke(self, skills, job_text):
         self.messages.append(HumanMessage(
                                     content=f"""
                                     ### Job Description:
@@ -55,9 +54,8 @@ class ParseEngine():
                     ),
                     ]
 
-    def invoke(self, pdf_path, cursor, job_id):
+    def invoke(self, pdf_path, job_text):
         resume_text = self.parse_resume(pdf_path)
-        job_text = cursor.execute("query")
         self.messages.append(HumanMessage(
                                     content=f"""
                                     ### Resume:
