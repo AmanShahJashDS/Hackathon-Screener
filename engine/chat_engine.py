@@ -21,47 +21,31 @@ class GenEngine():
         self.messages = [
                             SystemMessage(
                                 content="""
-                        ###### JD ######
-                        Designation: # designation name
-                        Experience: # Experience in Years
-
-                        Primary Skills:
-
-                        1. Machine Learning Algorithms
-                        2. Statistical Methods
-                        3. Python, R
-                        4. Flask
-                        5. Neural Network
-
-                        Secondary Skills:
-                        1. Pandas.
-                        2. NoSQL.
-                        3. Data Analytics
-
-
-                        ###### Resume ######
-                        Candidate's Skill:
-                        1. Machine learning
-                        2. Deep learning
-                        3. Computer Vision
-
-                        ###### PROMPT ######
-                        You are AI interviewer who need to generate questions given job description provided by recruiter 
-                        and candidate's skill extracted from the resume.
+                        You are AI interviewer who need to generate questions given job description provided by recruiter and candidate's skill extracted from the resume.
 
                         Instruction to generate questions:
                         1. Questions should cover all the primary skills, some of the secondary skills and candidate's skills
-                        2. Total 10 questions should be generated
+                        2. Generate 20 question
                         3. Questions should be around fundamentals involved in the skills mentioned
-                        4. Along with questions provide the skills on you are evaluating. Note: skills should be from the given context only.
+                        4. Along with questions provide the skills on which you are evaluating. Note: skills should be from the given context only.
+
+                        # Ouptut Format:
+                        {"questions": [q1, q2, ...]}
                         """
-                            ),
-                            HumanMessage(
-                                    content="Provide Question"
-                                    )
+                            )
                             ]
 
-    def invoke(self):
+    def invoke(self, skills, cursor, job_id):
+        job_text = cursor.execute("query")
+        self.messages.append(HumanMessage(
+                                    content=f"""
+                                    ### Job Description:
+                                    {job_text}
+
+                                    ### Candidate's Skill:
+                                    {skills}
+                                    """
+                                    ))
         return self.llm.invoke(self.messages)
     
 class ParseEngine():
@@ -79,25 +63,37 @@ class ParseEngine():
         self.messages = [
                     SystemMessage(
                                 content="""
-                        You are a recruiter reviewing a candidates job profile.
+                        You are provided with Resume of the candidate and Job description.
+                        Job description has keys: Designation, Experience, Primary Skills, Secondary Skills
+
+                        Extract following keywords from the resume which are matching with the Job Description:
+                        1. Years of Experience
+                        2. Key Skills
+
+                        It would be ideal if we have one skill from resume that is relevant to a different skill in job description.
+
+                        Output Format:
+                        ### JSON
+                        ```
+                        {
+                        "experience": # years of experience if provided, fresher if mentioned or Unknown of not mentioned 
+                        "key_skills": # list of skills that are matching with job description, order by most relevant skills along with skills mentioned in job description
+                        }
+                        ```
                         """
                     ),
                     ]
 
-    def invoke(self, pdf_path, cursor):
+    def invoke(self, pdf_path, cursor, job_id):
         resume_text = self.parse_resume(pdf_path)
         job_text = cursor.execute("query")
         self.messages.append(HumanMessage(
                                     content=f"""
-                                    This is a  resume : {resume_text} 
-                                    Extract the following information from the given resume 
-                                    in a json. [The first key should be 'Years of Experience' if it doesn't show any experience 
-                                    or if the candidate is a recent graduate give 0 give me answer as one number and nothing else, 
-                                    The second key is 'Current Position' if any else return Student here,  and the third key is a 
-                                    'Key Skills' this is a comma seprated list of five most relevant keyskills from this person's resume 
-                                    to this job description {job_text}. I only want skills that are present in the resume and 
-                                    relevant to the skills in {job_text} and it would be ideal if we have one skill from resume that is 
-                                    relevant to a different skill in {job_text}. All skills should be present in the resume]
+                                    ### Resume:
+                                    {resume_text}
+
+                                    ### Job Description:
+                                    {job_text}
                                     """
                                     ))
         return self.llm.invoke(self.messages)
