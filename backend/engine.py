@@ -3,7 +3,7 @@ from langchain_anthropic import ChatAnthropic
 from dotenv import load_dotenv, find_dotenv
 import os
 import PyPDF2
-
+from prompts import GEN_PROMPT, EVAL_PROMPT, PARSE_PROMPT 
 # load API keys
 _ = load_dotenv(find_dotenv())
 
@@ -20,18 +20,7 @@ class GenEngine():
                 )
         self.messages = [
                             SystemMessage(
-                                content="""
-                        You are AI interviewer who need to generate questions given job description provided by recruiter and candidate's skill extracted from the resume.
-
-                        Instruction to generate questions:
-                        1. Questions should cover all the primary skills, some of the secondary skills and candidate's skills
-                        2. Generate 20 question
-                        3. Questions should be around fundamentals involved in the skills mentioned
-                        4. Along with questions provide the skills on which you are evaluating. Note: skills should be from the given context only.
-
-                        # Ouptut Format:
-                        {"questions": [q1, q2, ...]}
-                        """
+                                content=GEN_PROMPT
                             )
                             ]
 
@@ -62,25 +51,7 @@ class ParseEngine():
 
         self.messages = [
                     SystemMessage(
-                                content="""
-                        You are provided with Resume of the candidate and Job description.
-                        Job description has keys: Designation, Experience, Primary Skills, Secondary Skills
-
-                        Extract following keywords from the resume which are matching with the Job Description:
-                        1. Years of Experience
-                        2. Key Skills
-
-                        It would be ideal if we have one skill from resume that is relevant to a different skill in job description.
-
-                        Output Format:
-                        ### JSON
-                        ```
-                        {
-                        "experience": # years of experience if provided, fresher if mentioned or Unknown of not mentioned 
-                        "key_skills": # list of skills that are matching with job description, order by most relevant skills along with skills mentioned in job description
-                        }
-                        ```
-                        """
+                                content=PARSE_PROMPT
                     ),
                     ]
 
@@ -132,18 +103,7 @@ class EvalEngine():
 
         self.messages = [
                     SystemMessage(
-                                content="""
-                        Given question answer pair you need to evaluate candidate's answer on each question.
-                        Steps to evaluate:
-                        1. Extract points to be covered to answer the given question
-                        2. Evaluate if most of the points are covered for given answer
-                        3. Rate the answer based on the points covered in the range of 1-10
-                        4. Don't give higher rating if there are only key words without much explanation
-
-                        Output Format:
-                        ### JSON
-                        {"q1": #rating (int), "q2": #rating (int), # similarly for other questions}
-                        """
+                                content=EVAL_PROMPT
                     ),
                     ]
 
