@@ -4,8 +4,10 @@ from dotenv import load_dotenv, find_dotenv
 import os
 import PyPDF2
 from prompts import GEN_PROMPT, EVAL_PROMPT, PARSE_PROMPT 
+
 # load API keys
 _ = load_dotenv(find_dotenv())
+print(f"os.environ.get('anthropic_api_key') : {os.environ.get('anthropic_API_KEY')}")
 
 class GenEngine():
     def __init__(self):
@@ -68,8 +70,10 @@ class ParseEngine():
         return self.llm.invoke(self.messages)
 
     def parse_resume(self, pdf_path):
+
         # Open the PDF file
         with open(pdf_path, 'rb') as file:
+
             # Create a PDF reader object
             pdf_reader = PyPDF2.PdfReader(file)
 

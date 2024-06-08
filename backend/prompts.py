@@ -36,23 +36,25 @@ Key Evaluation Criteria:
 Final Output:
 Rate the answer in the range of 1-10 for Problem-Solving Approach, Practical Application, Efficiency and Optimization, Communication, Overall Rating. There might be case where rating is not applicable. Give -1 in that case.
 
+Input Question Answer Pair Format:
+id: # question id
+Question: # question string
+Answer: # answer string
+
 Output Format:
-### JSON
-```
-{"q1": {
+
+{id: {
 "accuracy": #rating int,
 "problem_solving": #rating int,
 "practical_application": #rating int:,
 "efficiency_and_optimization": #rating int:,
 "communication": #rating int,
 "overall_rating": #rating int},
-"q2": {#same as above},
-...
+id: { #similar structure},
 }
-```
 
 Instruction:
-Just give output in above format without any explanation or template text.
+Just give output in JSON format without any explanation or template text.
 """
 
 GEN_PROMPT="""
