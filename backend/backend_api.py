@@ -11,6 +11,9 @@ from engine import GenEngine, ParseEngine, EvalEngine
 import json
 from http.client import HTTPException
 from typing import List, Dict, Any
+import logging
+
+log = logging.getLogger("backend-apis")
 
 UPLOAD_DIRECTORY = "/home/ec2-user/resumes"  
 
@@ -80,12 +83,12 @@ async def signup(
         print(org_id)
 
 
-        insert_user_query = text("INSERT INTO screener.users (username, password , user_role ,org_id) VALUES (:user, :hashed_password, :user_role, :org_id)")
-        db.execute(insert_user_query, {"user": user, "hashed_password":password, "user_role": user_role_id.lower() ,"org_id":org_id[0]})
+        insert_user_query = text("INSERT INTO screener.users (username, password , user_role) VALUES (:user, :hashed_password, :user_role)")
+        db.execute(insert_user_query, {"user": user, "hashed_password":password, "user_role": user_role_id.lower()})
         db.commit()
 
         return {
-            "Success": True,
+            "Success": True, 
             "message": "User signed up successfully"
         }
     except Exception as e:
@@ -170,7 +173,7 @@ async def list_jobs(
     org_id: str = Query(...),
     db: Session = Depends(get_db)
 ):  
-
+    print(f" -- List Jobs API called with args : org_id : {org_id} --")
     try :
         jobs_query=text("SELECT job_role,job_id,job_status FROM screener.job_details WHERE org_id ='{}'".format(org_id))
         jobs = db.execute(jobs_query, {'org_id': org_id}).fetchall()
@@ -217,12 +220,18 @@ async def list_jobs(
 @app.post("/analysis")
 async def upload_pdf(pdf_file: UploadFile = File(...),
                      job_id: str = Query(...),
+                     org_id: str = Query(...),
+                     user_name: str = Query(...),
                      db: Session = Depends(get_db)):
+
+    print(f"-- Analysis API called with args : job_id : {job_id}, org_id : {org_id}, user_name : {user_name} --")
+
+    # upload pdf file to server
     try:
         
         # extract filename from file
-        # start_timestamp = str(datetime.now())
-        start_timestamp = str(datetime.now()).replace(" ", "_").replace(":", "_").replace(".", "_")
+        start_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        print(f"start_timestamp : {start_timestamp}")
         filename = start_timestamp+pdf_file.filename
 
         # check if file is pdf
@@ -237,21 +246,35 @@ async def upload_pdf(pdf_file: UploadFile = File(...),
     except Exception as e:
         print(f"Exception occured while uploading file : {e}")
         return {"status_code": 400, "detail": "Error while uploading pdf file"}
+
+    # get user_id from db
+    try:
+        user_id_query = text("SELECT user_id FROM screener.users WHERE username='{}'".format(user_name))
+        user_id = db.execute(user_id_query, {'user_name': user_name}).fetchone()[0]
+        print(f"user_id : {user_id}")
+
+    except Exception as e:
+        print(f"Exception occured while reading user_id from DB : {e}")
+        return {"status_code": 400, "detail": "Error while reading user_id from DB for creating sessions"}
     
     # insert session details in db
-    # try:
-    #     user_id = 999 # get user_id from session - NEED TO UPDATE
-    #     insert_session_query = text("insert into screener.sessions (job_id, user_id, session_start_date) values ({},{},'{}')".format(job_id, user_id,start_timestamp))
-    #     db.execute(insert_session_query)
-    #     db.commit()
-    # except Exception as e:
-    #     print(f"Exception occured while inserting data into DB : {e}")
-    #     return {"status_code": 400, "detail": "Error while inserting session details into DB"}
-
     try:
+        insert_session_query = text("insert into screener.sessions (job_id, user_id, session_start_date) values ({},{},'{}')".format(job_id, user_id,start_timestamp))
 
+        db.execute(insert_session_query)
+        db.commit()
+        print("----->Session details inserted successfully into DB")
+
+    except Exception as e:
+        log.error(f"Exception occured while inserting data into DB : {e}")
+        return {"status_code": 400, "detail": "Error while inserting session details into DB"}
+
+    # get job requirements from db
+    try:
         job_req_query=text("SELECT primary_skills,secondary_skills,required_exp FROM screener.job_requirements where job_id='{}'".format(job_id))
         job_requirements = db.execute(job_req_query, {'job_id': job_id}).fetchone()
+        print(f"job_requirements : {job_requirements}")
+        print(f"job requirements fetched successfully")
         
     except Exception as e:
         print(f"Exception occured while reading from Job Requirements table : {e}")
@@ -262,6 +285,7 @@ async def upload_pdf(pdf_file: UploadFile = File(...),
         resume_parser = ParseEngine()
         resume_response = resume_parser.invoke(file_path, job_requirements)
         resume_data = json.loads(resume_response.content.replace("\n", "").strip())
+        print(f"resume_data parsed successfully")
 
     except Exception as e:
         print(f"exception occurred while parsing resume : {e}")
@@ -273,6 +297,7 @@ async def upload_pdf(pdf_file: UploadFile = File(...),
         questions_response = chat_engine.invoke(resume_data["key_skills"], job_requirements)
         print(f"questions_response : {questions_response}")
         questions = json.loads(questions_response.content.replace("\n", "").strip())
+        print(f"questions generated successfully")
     except Exception as e:
         print(f"exception occurred while generating questions : {e}")
         return {"status_code": 400, "detail": "Error while Generating questions"}
@@ -282,80 +307,100 @@ async def upload_pdf(pdf_file: UploadFile = File(...),
                     "Success": True,
                     "timestamp": str(datetime.now()),
                 }
+        print("----->returning response data")
         return response_data
     except Exception as e:
         print(str(e))
         return {"status_code": 400, "detail": "Error while Generating questions"}
 
 @app.post("/submit")
-
 async def submit(qa_pairs: List[Dict[str, str]], 
-                user_id: str = Query(...),
+                user_name: str = Query(...),
                 db: Session = Depends(get_db)):
 
-    success = "false"
-    print(f"qa pair type : {type(qa_pairs)}")
-    
-    end_timestamp = str(datetime.now()).replace(" ", "_").replace(":", "_").replace(".", "_")
+    print(f"-----> Submit API called with args : qa_pairs : {qa_pairs}, user_name : {user_name} <-----")
 
-    user_id = 999 # get user_id from session - NEED TO UPDATE
+    success = "false"
+    
+    end_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # get user_id from db
+    try:
+        user_id_query = text("SELECT user_id FROM screener.users WHERE username='{}'".format(user_name))
+        user_id = db.execute(user_id_query, {'user_name': user_name}).fetchone()[0]
+        print(f"user_id : {user_id}")
+    except Exception as e:
+        print(f"Exception occurred while fetching user_id from DB : {e}")
+        return {"status_code": 400, "detail": "Error while fetching user_id from DB"}
 
     # insert end_timestamp into db
-    # try:
-    #     insert_end_timestamp_query = text("insert into screener.sessions (session_end_date) values ('{}') where user_id = {};".format(end_timestamp, user_id))
-    #     db.execute(insert_end_timestamp_query)
-    #     db.commit()
-
-    # except Exception as e:
-    #     print(f"Exception occurred while inserting session_end_date into DB : {e}")
-    #     return {"status_code": 400, "detail": "Error while inserting session_end_date into DB"}
-
-    print("deleting data from table")
-
-    try :
-        del_query = text("truncate table screener.session_qa CASCADE;")
-        db.execute(del_query)
+    try:
+        insert_end_timestamp_query = text("update screener.sessions set session_end_date = '{}' where user_id = {};".format(end_timestamp, user_id))
+        db.execute(insert_end_timestamp_query)
         db.commit()
+        print("----->session_end_date inserted successfully into DB")
+
     except Exception as e:
-        print(f"Exception occurred while deleting data from table : {e}")
-        return {"status_code": 400, "detail": "Error while deleting data from table"}
+        print(f"Exception occurred while inserting session_end_date into DB : {e}")
+        return {"status_code": 400, "detail": "Error while inserting session_end_date into DB"}
+
+    # print("deleting data from table")
+
+    # try :
+    #     del_query = text("truncate table screener.session_qa CASCADE;")
+    #     db.execute(del_query)
+    #     db.commit()
+    # except Exception as e:
+    #     print(f"Exception occurred while deleting data from table : {e}")
+    #     return {"status_code": 400, "detail": "Error while deleting data from table"}
+
+    # fetch session_id from db
+    try:
+        session_id_query = text("SELECT session_id FROM screener.sessions WHERE user_id = {} ORDER BY session_id DESC LIMIT 1;".format(user_id))
+        session_id = db.execute(session_id_query).fetchone()[0]
+        print(f"----->Session_id : {session_id}")
+
+    except Exception as e:
+        print(f"Exception occurred while fetching session_id from DB : {e}")
+        return {"status_code": 400, "detail": "Error while fetching session_id from DB"}
 
     print("Proceeding to parse and evaluate the answers...")
-
     try:
-
         for qa in qa_pairs:
             print(f"qa : {qa}")
             question = qa["question"]
             answer = qa["ans"]
-            print(f"question : {question}")
-            print(f"answer : {answer}")
 
-            insert_qa_query = text("insert into screener.session_qa (question, answer) values ('{}','{}')".format(question, answer));
+            insert_qa_query = text("insert into screener.session_qa (session_id, question, answer) values ({},'{}','{}')".format(session_id,question, answer));
+            print(f"insert_qa_query : {insert_qa_query}")
             db.execute(insert_qa_query)
             db.commit()
+            print("Data inserted successfully into DB for session_qa")
         
-        print("Data inserted successfully into DB")
+        print("All QA Data inserted successfully into DB - session_qa table")
 
     except Exception as e:
         print(f"Exception occurred while inserting data into DB : {e}")
-        return {"status_code": 400, "detail": "Error while inserting data into DB"}   
+        return {"status_code": 400, "detail": "Error while inserting data into DB for session_qa"}   
     
 
     # Evaluate the qa_pairs
 
     # get qa_id, question and answer from db
-
-    qa_query = text("SELECT qa_id, question, answer FROM screener.session_qa");
+    qa_query = text("SELECT qa_id, question, answer FROM screener.session_qa where session_id = {};".format(session_id));
     qa_data = db.execute(qa_query).fetchall()
     print(f"qa_data : {qa_data}")
 
     qa = ""
     # create a list of questions and answers
+    count_qa = 0;
     for id,q,a in qa_data:
         qa += f"QA_ID : {id}\nQuestion : {q}\nAnswer : {a} \n\n"
-
-    print(f"qa : {qa}")
+        count_qa += 1
+        if count_qa == 10:
+            break
+    
+    print(f"numbers of questios to be evaluated : {count_qa}")
 
     # invoke eval engine
     try:
@@ -364,14 +409,12 @@ async def submit(qa_pairs: List[Dict[str, str]],
         print(f"eval_response : {eval_response}")
         print(f"eval_response content :", eval_response.content.replace('\n', '').strip())
         evaluations = json.loads(eval_response.content.replace("\n", "").strip())
-
-        print(f"evaluations : {evaluations}")
-
+        print(f"evaluations generated successfully")
     except Exception as e:
         print(f"exception occurred while evaluating answers : {e}")
         return {"status_code": 400, "detail": "Error while Evaluating answers"}
 
-
+    # insert evaluations into db
     try:
         
         print("Inserting evaluations into DB")
@@ -385,21 +428,68 @@ async def submit(qa_pairs: List[Dict[str, str]],
             communication = value["communication"]
             overall_rating = value["overall_rating"]
 
-            insert_eval_query = text("insert into screener.rating (qa_id, accuracy, problem_solving, practical_application, efficiency_and_optimization, communication, overall_rating) values ({},{},{},{},{},{},{})".format(key, accuracy, problem_solving, practical_application, efficiency_and_optimization, communication, overall_rating));
+            insert_eval_query = text("insert into screener.rating (session_id, qa_id, accuracy, problem_solving, practical_application, efficiency_and_optimization, communication, overall_rating) values ({},{},{},{},{},{},{},{})".format(session_id,key, accuracy, problem_solving, practical_application, efficiency_and_optimization, communication, overall_rating));
             db.execute(insert_eval_query)
             db.commit()
 
             success = "true"
+        print("----->Evaluations inserted successfully into DB")
 
     except Exception as e:
         print(f"Exception occurred while inserting data into DB : {e}")
         return {"status_code": 400, "detail": "Error while inserting data into DB"}
 
+
+    # fetch details report
+
+    try:
+        metric_query = text("""SELECT
+                                AVG(CASE WHEN accuracy = -1 THEN NULL ELSE accuracy END) as "accuracy",
+                                AVG(CASE WHEN problem_solving = -1 THEN NULL ELSE problem_solving END) as "problem_solving",
+                                AVG(CASE WHEN practical_application = -1 THEN NULL ELSE practical_application END) as "practical_application",
+                                AVG(CASE WHEN efficiency_and_optimization = -1 THEN NULL ELSE efficiency_and_optimization END) as "efficiency_and_optimization",
+                                AVG(CASE WHEN communication = -1 THEN NULL ELSE communication END) as "communication",
+                                AVG(CASE WHEN overall_rating = -1 THEN NULL ELSE overall_rating END) as "overall_rating"
+                            FROM
+                                screener.rating
+                            where session_id = {};""".format(session_id))
+        metrics = db.execute(metric_query).fetchall()
+        
+        metric_dict = {
+            "accuracy": metrics[0][0] if metrics[0][0] else 0,
+            "problem_solving": metrics[0][1] if metrics[0][1] else 0,
+            "practical_application": metrics[0][2] if metrics[0][2] else 0,
+            "efficiency_and_optimization": metrics[0][3] if metrics[0][3] else 0,
+            "communication": metrics[0][4] if metrics[0][4] else 0,
+            "overall_rating": metrics[0][5] if metrics[0][5] else 0
+        }
+
+        print(f"metrics : {metrics}")
+        print(f"metric_dict : {metric_dict}")
+
+        job_id_query = text("SELECT job_id FROM screener.sessions WHERE session_id = {}".format(session_id))
+        job_id = db.execute(job_id_query).fetchone()[0]
+        print(f"job_id : {job_id}")
+
+        job_role_query = text("SELECT job_role FROM screener.job_details WHERE job_id = {}".format(job_id))
+        job_role = db.execute(job_role_query).fetchone()[0]
+        print(f"job_role : {job_role}")
+
+        print("-----$$$$$$$$$$$$$$$$$$$$$$$$$$> Metrics fetched successfully from DB")
+
+    except Exception as e:
+        print(f"Exception occurred while fetching data from DB : {e}")
+        return {"status_code": 400, "detail": "Error while fetching data from DB"}
+
     
     if success == "true":
         return {
             "Success": True,
-            "message": "Answers evaluated successfully"
+            "user_id": user_id,
+            "user_name": user_name,
+            "session_id": session_id,
+            "message": "Answers evaluated successfully",
+            "metrics_dict": metric_dict
         }
     else :
         return {

@@ -71,24 +71,29 @@ class ParseEngine():
 
     def parse_resume(self, pdf_path):
 
-        # Open the PDF file
-        with open(pdf_path, 'rb') as file:
+        try :
+            print("------------------STARTED PARSING RESUME---------------")
+            # Open the PDF file
+            with open(pdf_path, 'rb') as file:
 
-            # Create a PDF reader object
-            pdf_reader = PyPDF2.PdfReader(file)
+                # Create a PDF reader object
+                pdf_reader = PyPDF2.PdfReader(file)
 
-            # Get the number of pages in the PDF
-            num_pages = len(pdf_reader.pages)
+                # Get the number of pages in the PDF
+                num_pages = len(pdf_reader.pages)
 
-            # Initialize a variable to store the extracted text
-            text = ""
+                # Initialize a variable to store the extracted text
+                text = ""
 
-            # Loop through each page and extract text
-            for page_num in range(num_pages):
-                page = pdf_reader.pages[page_num]
-                text += page.extract_text()
+                # Loop through each page and extract text
+                for page_num in range(num_pages):
+                    page = pdf_reader.pages[page_num]
+                    text += page.extract_text()
 
-        return text
+            return text
+        except Exception as e:
+            print(f"Error in parsing resume: {e}")
+            return ""
 
 
 class EvalEngine():
@@ -97,7 +102,7 @@ class EvalEngine():
         self.llm = ChatAnthropic(
                     model=MODEL_NAME,
                     temperature=0,
-                    max_tokens=1024,
+                    max_tokens=2000,
                     timeout=None,
                     max_retries=2,
                     # other params...
