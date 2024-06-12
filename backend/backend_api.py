@@ -17,11 +17,11 @@ log = logging.getLogger("backend-apis")
 
 UPLOAD_DIRECTORY = "/home/ec2-user/resumes"  
 
-DB_HOST = 'screeners.c3iyi0cuiwty.us-east-1.rds.amazonaws.com'
+DB_HOST = 'localhost'
 DB_PORT = '5432'
-DB_NAME = 'postgres'
+DB_NAME = 'screeners'
 DB_USER = 'postgres'
-DB_PASSWORD = 'jashds48'
+DB_PASSWORD = 'postgres'
 
 DATABASE_URL = f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
