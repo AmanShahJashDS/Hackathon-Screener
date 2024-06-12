@@ -17,6 +17,7 @@ log = logging.getLogger("backend-apis")
 
 UPLOAD_DIRECTORY = "/home/ec2-user/resumes"  
 
+
 DB_HOST = 'localhost'
 DB_PORT = '5432'
 DB_NAME = 'screeners'
